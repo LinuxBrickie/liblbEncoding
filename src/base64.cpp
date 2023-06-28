@@ -18,15 +18,7 @@
 
 #include <lb/encoding/base64.h>
 
-#include <string>
-#include <stdint.h>
-
-#include <cstring>
-#include <iomanip>
-#include <iostream>
 #include <memory>
-
-#include <boost/compute/detail/sha1.hpp>
 
 
 namespace lb
@@ -56,12 +48,12 @@ const char base64Lookup[ 65 ]
 
     Endian-agnostic.
  */
-void toBase64Triplet( const unsigned char* src, char* dst )
+void encodeTriplet( const unsigned char* src, char* dst )
 {
-  dst[0] = base64Lookup[ uint8_t(   *src >> 2 ) ];
-  dst[1] = base64Lookup[ uint8_t( ( ( *src << 4 ) & 0x30 ) | ( *(src+1) >> 4 ) ) ];
-  dst[2] = base64Lookup[ uint8_t( ( ( *(src+1) << 2 ) & 0x3F ) | ( *(src+2) >> 6 ) ) ];
-  dst[3] = base64Lookup[ uint8_t( ( *(src+2) & 0x3F ) ) ];
+  dst[0] = base64Lookup[ (unsigned char)(   *src >> 2 ) ];
+  dst[1] = base64Lookup[ (unsigned char)( ( ( *src << 4 ) & 0x30 ) | ( *(src+1) >> 4 ) ) ];
+  dst[2] = base64Lookup[ (unsigned char)( ( ( *(src+1) << 2 ) & 0x3F ) | ( *(src+2) >> 6 ) ) ];
+  dst[3] = base64Lookup[ (unsigned char)( ( *(src+2) & 0x3F ) ) ];
 }
 
 /**
@@ -74,11 +66,11 @@ void toBase64Triplet( const unsigned char* src, char* dst )
 
     Endian-agnostic.
  */
-void toBase64Doublet( const unsigned char* src, char* dst )
+void encodeDoublet( const unsigned char* src, char* dst )
 {
-  dst[0] = base64Lookup[ uint8_t(   *src >> 2 ) ];
-  dst[1] = base64Lookup[ uint8_t( ( ( *src << 4 ) & 0x30 ) | ( *(src+1) >> 4 ) ) ];
-  dst[2] = base64Lookup[ uint8_t( ( *(src+1) << 2 ) & 0x3F ) ];
+  dst[0] = base64Lookup[ (unsigned char)(   *src >> 2 ) ];
+  dst[1] = base64Lookup[ (unsigned char)( ( ( *src << 4 ) & 0x30 ) | ( *(src+1) >> 4 ) ) ];
+  dst[2] = base64Lookup[ (unsigned char)( ( *(src+1) << 2 ) & 0x3F ) ];
   dst[3] = '=';
 }
 
@@ -92,10 +84,10 @@ void toBase64Doublet( const unsigned char* src, char* dst )
 
     Endian-agnostic.
  */
-void toBase64Singlet( const unsigned char* src, char* dst )
+void encodeSinglet( const unsigned char* src, char* dst )
 {
-  dst[0] = base64Lookup[ uint8_t(   *src >> 2 ) ];
-  dst[1] = base64Lookup[ uint8_t( ( *src << 4 ) & 0x30 ) ];
+  dst[0] = base64Lookup[ (unsigned char)(   *src >> 2 ) ];
+  dst[1] = base64Lookup[ (unsigned char)( ( *src << 4 ) & 0x30 ) ];
   dst[2] = '=';
   dst[3] = '=';
 }
@@ -109,7 +101,7 @@ void encode( const char* src, size_t numSrcChars, char* dst )
 
   for ( size_t i = 0; i < numTriplets; ++i, usrc += 3, dst += 4 )
   {
-    toBase64Triplet( usrc, dst );
+    encodeTriplet( usrc, dst );
   }
 
   switch( extra )
@@ -117,14 +109,33 @@ void encode( const char* src, size_t numSrcChars, char* dst )
   case 0:
     break;
   case 1:
-    toBase64Singlet( usrc, dst );
+    encodeSinglet( usrc, dst );
     break;
   case 2:
-    toBase64Doublet( usrc, dst );
+    encodeDoublet( usrc, dst );
     break;
   default: // Impossible
     break;
   }
+}
+
+std::string encode( const std::string& src )
+{
+  if ( src.empty() )
+  {
+    return {};
+  }
+
+  const size_t requiredStorage{ 4 * ( (src.size()-1)/3 + 1) };
+
+  std::unique_ptr<char[]> dst{ std::make_unique<char[]>( requiredStorage ) };
+
+  encode( src.c_str(), src.size(), dst.get() );
+
+  // std::string always takes a copy. Understanable, but unfortunate here. If
+  // only there was some sort of move semantics for passing C-style string
+  // ownership to std::string.
+  return std::string( dst.get(), requiredStorage );
 }
 
 

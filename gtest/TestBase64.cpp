@@ -22,8 +22,16 @@
 
 TEST(Encoding, Base64)
 {
+  // C-string API tests
   char encoded[128];
+
+  encoded[0] = '\0';
+  lb::encoding::base64::encode( "", 0, encoded );
+  EXPECT_EQ( std::string( encoded ), "" );
+
   encoded[4] = '\0';
+  lb::encoding::base64::encode( "\0", 1, encoded );
+  EXPECT_EQ( std::string( encoded ), "AA==" );
 
   lb::encoding::base64::encode( "Man", 3, encoded );
   EXPECT_EQ( std::string( encoded ), "TWFu" );
@@ -38,7 +46,22 @@ TEST(Encoding, Base64)
   lb::encoding::base64::encode( "Many hands make light work.", 27, encoded );
   EXPECT_EQ( std::string( encoded ), "TWFueSBoYW5kcyBtYWtlIGxpZ2h0IHdvcmsu" );
 
+  // Encode the binary SHA1 hash of "The quick brown fox jumps over the lazy dog"
   encoded[28] = '\0';
   lb::encoding::base64::encode( "\x2f\xd4\xe1\xc6\x7a\x2d\x28\xfc\xed\x84\x9e\xe1\xbb\x76\xe7\x39\x1b\x93\xeb\x12", 20, encoded );
   EXPECT_EQ( std::string( encoded ), "L9ThxnotKPzthJ7hu3bnORuT6xI=" );
+
+  // std::string API tests (just repeat C-string tests)
+  EXPECT_EQ( lb::encoding::base64::encode( "" ), "" );
+  std::string s( "\0", 1 );
+  EXPECT_EQ( lb::encoding::base64::encode( s ), "AA==" );
+  EXPECT_EQ( lb::encoding::base64::encode( "Man" ), "TWFu" );
+  EXPECT_EQ( lb::encoding::base64::encode( "Ma" ), "TWE=" );
+  EXPECT_EQ( lb::encoding::base64::encode( "M" ), "TQ==" );
+  EXPECT_EQ( lb::encoding::base64::encode( "Many hands make light work." )
+           , "TWFueSBoYW5kcyBtYWtlIGxpZ2h0IHdvcmsu" );
+  EXPECT_EQ( lb::encoding::base64::encode( "\x2f\xd4\xe1\xc6\x7a\x2d\x28\xfc\xed\x84\x9e\xe1\xbb\x76\xe7\x39\x1b\x93\xeb\x12" )
+           , "L9ThxnotKPzthJ7hu3bnORuT6xI=" );
+
+
 }
