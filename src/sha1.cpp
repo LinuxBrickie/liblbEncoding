@@ -96,11 +96,11 @@ void encode( const char* src, size_t numSrcChars, char* dst )
   // is stored in the leftmost byte position.
 
   // Big Endian representations
-  uint32_t h0 = 0x67452301; // little endian 0x01234567
-  uint32_t h1 = 0xEFCDAB89; // little endian 0x89ABCDEF
-  uint32_t h2 = 0x98BADCFE; // little endian 0xEFDCBA98
-  uint32_t h3 = 0x10325476; // little endian 0x76543210
-  uint32_t h4 = 0xC3D2E1F0; // little endian 0xF0E1D2C3
+  uint32_t h[5] = { 0x67452301    // little endian 0x01234567
+                  , 0xEFCDAB89    // little endian 0x89ABCDEF
+                  , 0x98BADCFE    // little endian 0xEFDCBA98
+                  , 0x10325476    // little endian 0x76543210
+                  , 0xC3D2E1F0 }; // little endian 0xF0E1D2C3
 
   uint32_t bigEndianWords[80];
 
@@ -134,11 +134,11 @@ void encode( const char* src, size_t numSrcChars, char* dst )
     }
 
     // Initialize hash value for this chunk:
-    uint32_t a = h0;
-    uint32_t b = h1;
-    uint32_t c = h2;
-    uint32_t d = h3;
-    uint32_t e = h4;
+    uint32_t a = h[0];
+    uint32_t b = h[1];
+    uint32_t c = h[2];
+    uint32_t d = h[3];
+    uint32_t e = h[4];
     uint32_t k = 0x5A827999;
     // Main loop. Manually unrolled.
 
@@ -194,56 +194,38 @@ void encode( const char* src, size_t numSrcChars, char* dst )
     }
 
     // Add this chunk's hash to result so far.
-    h0 = h0 + a;
-    h1 = h1 + b;
-    h2 = h2 + c;
-    h3 = h3 + d;
-    h4 = h4 + e;
+    h[0] = h[0] + a;
+    h[1] = h[1] + b;
+    h[2] = h[2] + c;
+    h[3] = h[3] + d;
+    h[4] = h[4] + e;
   }
 
   // The final hash value (big-endian) is a 160-bit number of the form:
   //
   //  (h0 << 128) | (h1 << 96) | (h2 << 64) | (h3 << 32) | h4
-  //
-  // Convert each byte to a 2-digit hex value (without using std::stringstream
-  // to avoid overhead).
-  char tmp[2];
-  for ( int i = 0; i < 4; ++i )
+  for ( int i = 0; i < 5; ++i, dst += 4 )
   {
-    const auto twoi{ 2 * i };
-    const auto eighti{ 8 * i };
-    char tmp[2];
-    hex::encode( uint8_t(h0 >> eighti), tmp );
-    dst[ 6 - twoi      ] = tmp[0];
-    dst[ 6 - twoi +  1 ] = tmp[1];
-    hex::encode( uint8_t(h1 >> eighti), tmp );
-    dst[ 6 - twoi +  8 ] = tmp[0];
-    dst[ 6 - twoi +  9 ] = tmp[1];
-    hex::encode( uint8_t(h2 >> eighti), tmp );
-    dst[ 6 - twoi + 16 ] = tmp[0];
-    dst[ 6 - twoi + 17 ] = tmp[1];
-    hex::encode( uint8_t(h3 >> eighti), tmp );
-    dst[ 6 - twoi + 24 ] = tmp[0];
-    dst[ 6 - twoi + 25 ] = tmp[1];
-    hex::encode( uint8_t(h4 >> eighti), tmp );
-    dst[ 6 - twoi + 32 ] = tmp[0];
-    dst[ 6 - twoi + 33 ] = tmp[1];
+    dst[0] = (h[i] >> 24) & 0xFF;
+    dst[1] = (h[i] >> 16) & 0xFF;
+    dst[2] = (h[i] >>  8) & 0xFF;
+    dst[3] =  h[i]        & 0xFF;
   }
 }
 
 
 std::string encode( const std::string& src )
 {
-  const size_t requiredStorage{ 40 };
+  const size_t requiredStorage{ 20 };
 
   std::unique_ptr<char[]> dst{ std::make_unique<char[]>( requiredStorage ) };
 
   encode( src.c_str(), src.size(), dst.get() );
 
-  // std::string always takes a copy. Understanable, but unfortunate here. If
+  // std::string always takes a copy. Understandable, but unfortunate here. If
   // only there was some sort of move semantics for passing C-style string
   // ownership to std::string.
-  return std::string( dst.get(), requiredStorage );
+  return { dst.get(), requiredStorage };
 }
 
 

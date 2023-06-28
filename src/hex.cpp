@@ -17,6 +17,8 @@
 
 #include <lb/encoding/hex.h>
 
+#include <memory>
+
 
 namespace lb
 {
@@ -60,6 +62,19 @@ void encode( const char* src, size_t numSrcBytes, char* dst )
   }
 }
 
+std::string encode( const std::string& src )
+{
+  const size_t requiredStorage{ 2 * src.size() };
+
+  std::unique_ptr<char[]> dst{ std::make_unique<char[]>( requiredStorage ) };
+
+  encode( src.c_str(), src.size(), dst.get() );
+
+  // std::string always takes a copy. Understandable, but unfortunate here. If
+  // only there was some sort of move semantics for passing C-style string
+  // ownership to std::string.
+  return { dst.get(), requiredStorage };
+}
 
 } // End of namespace hex
 

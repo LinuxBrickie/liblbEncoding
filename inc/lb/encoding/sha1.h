@@ -49,7 +49,7 @@ namespace sha1
     The data does not have to be ASCII, general binary data can be encoded too.
 
     The required size of \a dst is 40 since the SHA1 digest is a 20 byte number
-    and each byte is represented by two hexadeciaml characters.
+    and each byte is represented by two hexadecimal characters.
 
     Obviously this is a one-way encoding.
 
@@ -74,7 +74,8 @@ void encode( const char* src, size_t numSrcChars, char* dst );
 
     Obviously this is a one-way encoding.
 
-    This is a std::string wrapper for the C_string version.
+    This is a std::string wrapper for the C_string version. Beware this does
+    have a C-string copy overhead when creating the return value.
 
     \sa void encode( const char*, size_t, char* )
  */

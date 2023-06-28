@@ -74,7 +74,8 @@ void encode( const char* src, size_t numSrcChars, char* dst );
     3 will there be no padding bytes. The encoded data is always a multiple of
     4 bytes.
 
-    This is a std::string wrapper for the C_string version.
+    This is a std::string wrapper for the C_string version. Beware this does
+    have a C-string copy overhead when creating the return value.
 
     \sa void encode( const char*, size_t, char* )
  */

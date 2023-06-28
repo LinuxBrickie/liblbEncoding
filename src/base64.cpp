@@ -132,10 +132,10 @@ std::string encode( const std::string& src )
 
   encode( src.c_str(), src.size(), dst.get() );
 
-  // std::string always takes a copy. Understanable, but unfortunate here. If
+  // std::string always takes a copy. Understandable, but unfortunate here. If
   // only there was some sort of move semantics for passing C-style string
   // ownership to std::string.
-  return std::string( dst.get(), requiredStorage );
+  return { dst.get(), requiredStorage };
 }
 
 

@@ -19,6 +19,7 @@
 */
 
 #include <cstddef>
+#include <string>
 
 
 namespace lb
@@ -35,7 +36,7 @@ namespace hex
 
 /**
     \brief Encode a byte value into a pair of hexadecimal characters.
-    \param src The byte to encode.
+    \param src The byte to encode (may contain nulls).
     \param buffer The destination for the conversion. Assumes that 2 contiguous
                   bytes are available for access.
 
@@ -48,7 +49,7 @@ void encode( char src, char* dst );
 
 /**
     \brief Encodes a string into pairs of hexadecimal characters.
-    \param src The byte to encode.
+    \param src The byte to encode (may contain nulls).
     \param buffer The destination for the conversion. Assumes that 2 contiguous
                   bytes are available for access.
 
@@ -57,6 +58,21 @@ void encode( char src, char* dst );
     A bare bones alternative to using a C++ stream with the std::hex manipulator.
  */
 void encode( const char* src, size_t numSrcBytes, char* dst );
+
+
+/**
+    \brief Encodes a string into pairs of hexadecimal characters.
+    \param src The byte to encode in the form of a std::string (may contain nulls).
+    \return The encoded hexadecimal characters.
+
+    Endian agnostic.
+
+    A bare bones alternative to using a C++ stream with the std::hex manipulator.
+
+    This is a std::string wrapper for the C_string version. Beware this does
+    have a C-string copy overhead when creating the return value.
+ */
+std::string encode( const std::string& src );
 
 
 } // End of namespace hex
