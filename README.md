@@ -22,6 +22,7 @@ This is a basic library that only does the things I need for my other libraries
 - base64, encoding only
 - hexadecimal, encoding only
 - bits, encoding only
+- SHA1, obviously a one-way encoding
 
 ## Notes
 

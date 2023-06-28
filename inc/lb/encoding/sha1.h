@@ -1,5 +1,5 @@
-#ifndef LB_ENCODING_BASE64_H
-#define LB_ENCODING_BASE64_H
+#ifndef LB_ENCODING_SHA1_H
+#define LB_ENCODING_SHA1_H
 
 /*
     Copyright (C) 2023  Paul Fotheringham (LinuxBrickie)
@@ -18,6 +18,7 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+#include <cstddef>
 #include <string>
 
 
@@ -29,12 +30,13 @@ namespace encoding
 {
 
 
-namespace base64
+namespace sha1
 {
 
 
 /**
-    \brief Encodes \a numSrcChars bytes of data from \a src to base64.
+    \brief Encodes \a numSrcChars bytes of data from \a src to s SHA1 digest in
+           hexadecimal string form.
     \param src The bytes to encode (may contain nulls).
     \param numSrcChars The number of bytes to encode.
     \param dst The destination for the encoding. Assumes that sufficient contiguous
@@ -46,42 +48,40 @@ namespace base64
 
     The data does not have to be ASCII, general binary data can be encoded too.
 
-    The required minimum size of \a dst is 4 * ((numSrcChars-1)/3 + 1) where the
-    division by 3 is assumed to round down.
+    The required size of \a dst is 40 since the SHA1 digest is a 20 byte number
+    and each byte is represented by two hexadeciaml characters.
 
-    Depending on the value of \a numSrcChars the final one or two destination
-    bytes may be padding bytes ('='). Only when \a numSrcChars is a multiple of
-    3 will there be no padding bytes. The encoded data is always a multiple of
-    4 bytes.
+    Obviously this is a one-way encoding.
 
     \sa std::string encode( const std::string& )
  */
 void encode( const char* src, size_t numSrcChars, char* dst );
 
+
 /**
-    \brief Encodes the data in \a src to base64.
+    \brief Encodes the data in \a src to s SHA1 digest in hexadecimal string
+           form.
     \param src The bytes to encode in the form of a std::string (may contain nulls).
-    \return The base64 encoding of \a src. Size will be a multiple of 4 bytes,
-            see description for details.
+    \return dst The hexadecimal SHA1 string encooding of \a src.
+
+    Endian agnostic in the sense that it operates on bytes. Obviously this does
+    *not* mean that you get the same result for both little and big endian if
+    you have, say, uint32_t data which you cast to char*.
 
     The data does not have to be ASCII, general binary data can be encoded too.
 
-    The size of the returned string \a dst is 4 * ((src.size()-1)/3 + 1) where
-    the division by 3 is assumed to round down.
+    The size of the returned string is 40.
 
-    Depending on the value of \a src.size() the final one or two destination
-    bytes may be padding bytes ('='). Only when \a src.size() is a multiple of
-    3 will there be no padding bytes. The encoded data is always a multiple of
-    4 bytes.
+    Obviously this is a one-way encoding.
 
     This is a std::string wrapper for the C_string version.
 
     \sa void encode( const char*, size_t, char* )
  */
-std::string encode( const std::string& src );
+std::string encode( const std::string& );
 
 
-} // End of namespace base64
+} // End of namespace sha1
 
 
 } // End of namespace encoding
@@ -90,4 +90,4 @@ std::string encode( const std::string& src );
 } // End of namespace lb
 
 
-#endif // LB_ENCODING_BASE64_H
+#endif // LB_ENCODING_SHA1_H
