@@ -1,4 +1,5 @@
 # liblbEncoding
+
 A GPL-3.0-or-later C++ library providing encoding algorithms.
 
 lb is short for LinuxBrickie, my online handle.
@@ -23,6 +24,7 @@ This is a basic library that only does the things I need for my other libraries
 - hexadecimal, encoding only
 - bits, encoding only
 - SHA1, obviously a one-way encoding
+- WebSocket, encoding/decoding of frames
 
 ## Notes
 
