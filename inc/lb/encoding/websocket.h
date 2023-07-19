@@ -21,6 +21,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -98,7 +99,15 @@ struct Header
 
 
   // Methods
-  uint8_t serialisedSizeInBytes() const;
+
+  /** \brief The size in bytes this \a Header requires when encoded. */
+  uint8_t encodedSizeInBytes() const;
+
+  /**
+      \brief The size in bytes a \a Header with \a payloadSize and \a isMasked
+             would require when encoded.
+   */
+  static uint8_t encodedSizeInBytes( size_t payloadSize, bool isMasked );
 
   enum class DecodeResult
   {
@@ -238,6 +247,9 @@ private:
     Note that decoding is the same operation, you can either call this function
     for decoding or the wrapper decodeMaskedPayload. If you use \a Decoder then
     this is all done for you anyway.
+
+    \sa encodeMaskedPayload( std::string&, const uint8_t[4] )
+    \sa encodeMaskedPayload( const std::string&, const uint8_t[4] )
  */
 void encodeMaskedPayload( const char* src
                         , size_t numSrcChars
@@ -260,6 +272,9 @@ void decodeMaskedPayload( const char* src
     Note that decoding is the same operation, you can either call this function
     for decoding or the wrapper decodeMaskedPayload. If you use \a Decoder then
     this is all done for you anyway.
+
+    \sa encodeMaskedPayload( const char*, size_t, const uint8_t[4], char* )
+    \sa encodeMaskedPayload( const std::string&, const uint8_t[4] )
  */
 void encodeMaskedPayload( std::string& src
                         , const uint8_t mask[4] );
@@ -280,11 +295,72 @@ void decodeMaskedPayload( std::string& src
     Note that decoding is the same operation, you can either call this function
     for decoding or the wrapper decodeMaskedPayload. If you use \a Decoder then
     this is all done for you anyway.
+
+    \sa encodeMaskedPayload( const char*, size_t, const uint8_t[4], char* )
+    \sa encodeMaskedPayload( std::string&, const uint8_t[4] )
  */
 std::string encodeMaskedPayload( const std::string& src
                                , const uint8_t mask[4] );
 std::string decodeMaskedPayload( const std::string& src
                                , const uint8_t mask[4] );
+
+
+/**
+    \brief The possible payload status codes of a CloseConnection control frame.
+ */
+enum class CloseStatusCode
+{
+  eNormal              = 1000,
+  eGoingAway           = 1001,
+  eProtocolError       = 1002,
+  eUnacceptableData    = 1003,
+  eMismatchedData      = 1007,
+  ePolicyViolation     = 1008,
+  eTooMuchData         = 1009,
+  eLackingExtension    = 1010, //!< Client only
+  eUnexpectedCondition = 1011, //!< Server only
+};
+
+
+/**
+    \brief Encodes \a closeStatusCode into \a dst as a two-byte integer stored
+           in network order.
+    \param closeStatusCode The status code to encode.
+    \param dst The destination for the encoding. Assumes that two contiguous
+               bytes are available for access.
+    \sa encodePayloadCloseStatusCode( CloseStatusCode, std::string& )
+ */
+void encodePayloadCloseStatusCode( CloseStatusCode closeStatusCode, char* dst );
+
+/**
+    \brief Encodes \a closeStatusCode into \a dst as a two-byte integer stored
+           in network order.
+    \param closeStatusCode The status code to encode.
+    \param dst The destination for the encoding. Assumes that two contiguous
+               bytes are available for access.
+    \sa encodePayloadCloseStatusCode( CloseStatusCode, char* )
+ */
+void encodePayloadCloseStatusCode( CloseStatusCode closeStatusCode, std::string& dst );
+
+/**
+    \brief Decodes two bytes of \a src into a CloseStatusCode assuming that they
+          represent an integer stored in network order.
+    \param src The source for the decoding. Assumes that two contiguous bytes
+               bytes are available for access.
+    \return The decoded CloseStatusCode if successful or an empty optional if not.
+    \sa decodePayloadCloseStatusCode( CloseStatusCode, std::string& )
+ */
+std::optional<CloseStatusCode> decodePayloadCloseStatusCode( const char* src );
+
+/**
+    \brief Decodes two bytes of \a src into a CloseStatusCode assuming that they
+          represent an integer stored in network order.
+    \param src The source for the decoding. Assumes that two contiguous bytes
+               bytes are available for access.
+    \return The decoded CloseStatusCode if successful or an empty optional if not.
+    \sa decodePayloadCloseStatusCode( CloseStatusCode, const char* )
+ */
+std::optional<CloseStatusCode> decodePayloadCloseStatusCode( const std::string& src );
 
 
 } // End of namespace websocket

@@ -91,7 +91,13 @@ std::string Header::toString( OpCode opCode )
   return "Unknown";
 }
 
-uint8_t Header::serialisedSizeInBytes() const
+uint8_t Header::encodedSizeInBytes() const
+{
+  return encodedSizeInBytes( payloadSize, isMasked );
+}
+
+// static
+uint8_t Header::encodedSizeInBytes( size_t payloadSize, bool isMasked )
 {
   uint8_t size{ 2 };
   if ( payloadSize >= ( 1 << 16 ) )
@@ -429,7 +435,7 @@ bool Decoder::Private::decodeHeader( const char*& buffer, size_t& numBufferBytes
     throw std::runtime_error{ "Failed to deserialise frame header. Eight byte payload size most signigicant bit is non-zero." };
   case Header::DecodeResult::eSuccess:
   {
-    const auto numHeaderBytes{ header.serialisedSizeInBytes() };
+    const auto numHeaderBytes{ header.encodedSizeInBytes() };
     buffer += numHeaderBytes;
     numBufferBytes -= numHeaderBytes;
     return true;
@@ -540,6 +546,116 @@ std::string decodeMaskedPayload( const std::string& src
                                , const uint8_t mask[4] )
 {
   return encodeMaskedPayload( src, mask );
+}
+
+template < class T >
+void encodePayloadCloseStatusCodeT( CloseStatusCode statusCode, T& dst )
+{
+  switch ( statusCode )
+  {
+  case CloseStatusCode::eNormal: // 1000
+    dst[0] = 0x03;
+    dst[1] = 0xE8;
+    break;
+  case CloseStatusCode::eGoingAway: // 1001
+    dst[0] = 0x03;
+    dst[1] = 0xE9;
+    break;
+  case CloseStatusCode::eProtocolError: // 1002
+    dst[0] = 0x03;
+    dst[1] = 0xEA;
+    break;
+  case CloseStatusCode::eUnacceptableData: // 1003
+    dst[0] = 0x03;
+    dst[1] = 0xEB;
+    break;
+  case CloseStatusCode::eMismatchedData: // 1007
+    dst[0] = 0x03;
+    dst[1] = 0xEF;
+    break;
+  case CloseStatusCode::ePolicyViolation: // 1008
+    dst[0] = 0x03;
+    dst[1] = 0xF0;
+    break;
+  case CloseStatusCode::eTooMuchData: // 1009
+    dst[0] = 0x03;
+    dst[1] = 0xF1;
+    break;
+  case CloseStatusCode::eLackingExtension: // 1010
+    dst[0] = 0x03;
+    dst[1] = 0xF2;
+    break;
+  case CloseStatusCode::eUnexpectedCondition: // 1011
+    dst[0] = 0x03;
+    dst[1] = 0xF3;
+    break;
+  }
+}
+
+void encodePayloadCloseStatusCode( CloseStatusCode statusCode, char* dst )
+{
+  encodePayloadCloseStatusCodeT( statusCode, dst );
+}
+
+void encodePayloadCloseStatusCode( CloseStatusCode statusCode, std::string& dst )
+{
+  encodePayloadCloseStatusCodeT( statusCode, dst );
+}
+
+template < class T >
+std::optional<CloseStatusCode> decodePayloadCloseStatusCodeT( const T& src )
+{
+  if ( src[0] == (char)0x03 )
+  {
+    if ( src[1] == (char)0xE8 )
+    {
+      return CloseStatusCode::eNormal; // 1000
+    }
+    else if ( src[1] == (char)0xE9 )
+    {
+      return CloseStatusCode::eGoingAway; // 1001
+    }
+    else if ( src[1] == (char)0xEA )
+    {
+      return CloseStatusCode::eProtocolError; // 1002
+    }
+    else if ( src[1] == (char)0xEB )
+    {
+      return CloseStatusCode::eUnacceptableData; // 1003
+    }
+    else if ( src[1] == (char)0xEF )
+    {
+      return CloseStatusCode::eMismatchedData; // 1007
+    }
+    else if ( src[1] == (char)0xF0 )
+    {
+      return CloseStatusCode::ePolicyViolation; // 1008
+    }
+    else if ( src[1] == (char)0xF1 )
+    {
+      return CloseStatusCode::eTooMuchData; // 1009
+    }
+    else if ( src[1] == (char)0xF2 )
+    {
+      return CloseStatusCode::eLackingExtension; // 1010
+    }
+    else if ( src[1] == (char)0xF3 )
+    {
+      return CloseStatusCode::eUnexpectedCondition; // 1011
+    }
+  }
+
+  return {};
+}
+
+std::optional<CloseStatusCode> decodePayloadCloseStatusCode( const char* src )
+{
+  return decodePayloadCloseStatusCodeT( src );
+}
+
+std::optional<CloseStatusCode> decodePayloadCloseStatusCode( const std::string& src )
+{
+  return decodePayloadCloseStatusCodeT( src );
 }
 
 

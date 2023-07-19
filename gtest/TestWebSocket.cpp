@@ -463,7 +463,7 @@ TEST(Decoding, WebSocketFrame)
   // need to go over that again. One consequence of this is that we can limit
   // ourselves to payload sizes less than 126 bytes.
 
-  char frameBytes[ 2 + 4 + 125 ]; // first two header bytes + header mask + paylaod
+  char frameBytes[ 2 + 4 + 125 ]; // first two header bytes + header mask + payload
 
   // Decode
   // - no bytes
@@ -633,6 +633,83 @@ TEST(Decoding, WebSocketFrame)
     EXPECT_TRUE( decodeResult.frames.empty() );
     EXPECT_EQ( decodeResult.numExtra, 4 );
   }
+}
+
+template <class T>
+void decodingWebSocketPayloadT( T& payload )
+{
+  std::optional<ws::CloseStatusCode> closeStatusCode;
+
+  payload[0] = 0x01; // invalid
+  payload[1] = 0xE8;
+  closeStatusCode = ws::decodePayloadCloseStatusCode( payload );
+  ASSERT_FALSE( closeStatusCode );
+
+  payload[0] = 0x03;
+  payload[1] = 0x6D; // invalid
+  closeStatusCode = ws::decodePayloadCloseStatusCode( payload );
+  ASSERT_FALSE( closeStatusCode );
+
+  // All valid codes have this as the first byte
+  payload[0] = 0x03;
+
+  payload[1] = 0xE8;
+  closeStatusCode = ws::decodePayloadCloseStatusCode( payload );
+  ASSERT_TRUE( closeStatusCode );
+  EXPECT_EQ( closeStatusCode, ws::CloseStatusCode::eNormal );
+
+  payload[1] = 0xE9;
+  closeStatusCode = ws::decodePayloadCloseStatusCode( payload );
+  ASSERT_TRUE( closeStatusCode );
+  EXPECT_EQ( closeStatusCode, ws::CloseStatusCode::eGoingAway );
+
+  payload[1] = 0xEA;
+  closeStatusCode = ws::decodePayloadCloseStatusCode( payload );
+  ASSERT_TRUE( closeStatusCode );
+  EXPECT_EQ( closeStatusCode, ws::CloseStatusCode::eProtocolError );
+
+  payload[1] = 0xEB;
+  closeStatusCode = ws::decodePayloadCloseStatusCode( payload );
+  ASSERT_TRUE( closeStatusCode );
+  EXPECT_EQ( closeStatusCode, ws::CloseStatusCode::eUnacceptableData );
+
+  payload[1] = 0xEF;
+  closeStatusCode = ws::decodePayloadCloseStatusCode( payload );
+  ASSERT_TRUE( closeStatusCode );
+  EXPECT_EQ( closeStatusCode, ws::CloseStatusCode::eMismatchedData );
+
+  payload[1] = 0xF0;
+  closeStatusCode = ws::decodePayloadCloseStatusCode( payload );
+  ASSERT_TRUE( closeStatusCode );
+  EXPECT_EQ( closeStatusCode, ws::CloseStatusCode::ePolicyViolation );
+
+  payload[1] = 0xF1;
+  closeStatusCode = ws::decodePayloadCloseStatusCode( payload );
+  ASSERT_TRUE( closeStatusCode );
+  EXPECT_EQ( closeStatusCode, ws::CloseStatusCode::eTooMuchData );
+
+  payload[1] = 0xF2;
+  closeStatusCode = ws::decodePayloadCloseStatusCode( payload );
+  ASSERT_TRUE( closeStatusCode );
+  EXPECT_EQ( closeStatusCode, ws::CloseStatusCode::eLackingExtension );
+
+  payload[1] = 0xF3;
+  closeStatusCode = ws::decodePayloadCloseStatusCode( payload );
+  ASSERT_TRUE( closeStatusCode );
+  EXPECT_EQ( closeStatusCode, ws::CloseStatusCode::eUnexpectedCondition );
+}
+
+TEST(Decoding, WebSocketPayload)
+{
+  // C-string API tests
+  char payloadBytes[2];
+  memset( payloadBytes, 0x00, 2 );
+  decodingWebSocketPayloadT( payloadBytes );
+
+
+  // std::string API tests (just repeat C-string tests)
+  std::string payloadString( "\x00\x00", 2 );
+  decodingWebSocketPayloadT( payloadString );
 }
 
 void testDecodedBytes( const char* context, char* actual, size_t numExpected, const char* expected )
@@ -820,6 +897,42 @@ TEST(Encoding, WebSocketPayload)
   // C-string API tests
 
   encoded[0] = '\0';
+  ws::encodePayloadCloseStatusCode( ws::CloseStatusCode::eNormal, encoded );
+  EXPECT_EQ( std::string( encoded ), "\x03\xE8" );
+
+  encoded[0] = '\0';
+  ws::encodePayloadCloseStatusCode( ws::CloseStatusCode::eGoingAway, encoded );
+  EXPECT_EQ( std::string( encoded ), "\x03\xE9" );
+
+  encoded[0] = '\0';
+  ws::encodePayloadCloseStatusCode( ws::CloseStatusCode::eProtocolError, encoded );
+  EXPECT_EQ( std::string( encoded ), "\x03\xEA" );
+
+  encoded[0] = '\0';
+  ws::encodePayloadCloseStatusCode( ws::CloseStatusCode::eUnacceptableData, encoded );
+  EXPECT_EQ( std::string( encoded ), "\x03\xEB" );
+
+  encoded[0] = '\0';
+  ws::encodePayloadCloseStatusCode( ws::CloseStatusCode::eMismatchedData, encoded );
+  EXPECT_EQ( std::string( encoded ), "\x03\xEF" );
+
+  encoded[0] = '\0';
+  ws::encodePayloadCloseStatusCode( ws::CloseStatusCode::ePolicyViolation, encoded );
+  EXPECT_EQ( std::string( encoded ), "\x03\xF0" );
+
+  encoded[0] = '\0';
+  ws::encodePayloadCloseStatusCode( ws::CloseStatusCode::eTooMuchData, encoded );
+  EXPECT_EQ( std::string( encoded ), "\x03\xF1" );
+
+  encoded[0] = '\0';
+  ws::encodePayloadCloseStatusCode( ws::CloseStatusCode::eLackingExtension, encoded );
+  EXPECT_EQ( std::string( encoded ), "\x03\xF2" );
+
+  encoded[0] = '\0';
+  ws::encodePayloadCloseStatusCode( ws::CloseStatusCode::eUnexpectedCondition, encoded );
+  EXPECT_EQ( std::string( encoded ), "\x03\xF3" );
+
+  encoded[0] = '\0';
   ws::encodeMaskedPayload( "", 0, mask, encoded );
   EXPECT_EQ( std::string( encoded ), "" );
 
@@ -829,10 +942,40 @@ TEST(Encoding, WebSocketPayload)
 
   encoded[0] = '\0'; // Decoding is identical to encoding so we should be able to go back
   ws::encodeMaskedPayload( "Hello", 5, mask, encoded );
-  EXPECT_EQ( std::string( encoded ), "\x7f\x9f\x4d\x51\x58" );
+  EXPECT_EQ( std::string( encoded ), "\x7F\x9F\x4D\x51\x58" );
 
   // std::string in-place tests (just repeat C-string tests)
   std::string inplace;
+
+  inplace.assign( "\x00\x00", 2 );
+  ws::encodePayloadCloseStatusCode( ws::CloseStatusCode::eNormal, inplace );
+  EXPECT_EQ( inplace, "\x03\xE8" );
+
+  ws::encodePayloadCloseStatusCode( ws::CloseStatusCode::eGoingAway, inplace );
+  EXPECT_EQ( inplace, "\x03\xE9" );
+
+  ws::encodePayloadCloseStatusCode( ws::CloseStatusCode::eProtocolError, inplace );
+  EXPECT_EQ( inplace, "\x03\xEA" );
+
+  ws::encodePayloadCloseStatusCode( ws::CloseStatusCode::eUnacceptableData, inplace );
+  EXPECT_EQ( inplace, "\x03\xEB" );
+
+  ws::encodePayloadCloseStatusCode( ws::CloseStatusCode::eMismatchedData, inplace );
+  EXPECT_EQ( inplace, "\x03\xEF" );
+
+  ws::encodePayloadCloseStatusCode( ws::CloseStatusCode::ePolicyViolation, inplace );
+  EXPECT_EQ( inplace, "\x03\xF0" );
+
+  ws::encodePayloadCloseStatusCode( ws::CloseStatusCode::eTooMuchData, inplace );
+  EXPECT_EQ( inplace, "\x03\xF1" );
+
+  ws::encodePayloadCloseStatusCode( ws::CloseStatusCode::eLackingExtension, inplace );
+  EXPECT_EQ( inplace, "\x03\xF2" );
+
+  ws::encodePayloadCloseStatusCode( ws::CloseStatusCode::eUnexpectedCondition, inplace );
+  EXPECT_EQ( inplace, "\x03\xF3" );
+
+  inplace.assign( "" );
   ws::encodeMaskedPayload( inplace, mask );
   EXPECT_EQ( inplace, "" );
 
