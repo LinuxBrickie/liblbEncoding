@@ -456,6 +456,20 @@ TEST(Decoding, WebSocketHeader)
   }
 }
 
+// Only testing the payloads as headers tested elsewhere
+void testPayloads( ws::Decoder::Result actualResult
+                             , const std::vector<std::string>& expectedPayloads
+                             , size_t expectedNumExtra )
+{
+  ASSERT_FALSE( actualResult.parseError );
+  ASSERT_EQ( actualResult.frames.size(), expectedPayloads.size() );
+  for ( size_t i = 0; i < actualResult.frames.size(); ++i )
+  {
+    EXPECT_EQ( actualResult.frames[i].payload, expectedPayloads[i] );
+  }
+  EXPECT_EQ( actualResult.numExtra, expectedNumExtra );
+}
+
 TEST(Decoding, WebSocketFrame)
 {
   // Note that these tests focus on the overall frame decoding. Header decoding
@@ -471,9 +485,7 @@ TEST(Decoding, WebSocketFrame)
     ws::Decoder decoder;
     memset( frameBytes, 0x00, sizeof(frameBytes) );
     const auto decodeResult = decoder.decode( frameBytes, 0 );
-    EXPECT_FALSE( decodeResult.parseError );
-    EXPECT_TRUE( decodeResult.frames.empty() );
-    EXPECT_EQ( decodeResult.numExtra, 0 );
+    testPayloads( decodeResult, {}, 0 );
   }
 
   // Decode
@@ -483,9 +495,7 @@ TEST(Decoding, WebSocketFrame)
     memset( frameBytes, 0x00, sizeof(frameBytes) );
     memcpy( frameBytes, "\x00", 1 );
     const auto decodeResult = decoder.decode( frameBytes, 1 );
-    EXPECT_FALSE( decodeResult.parseError );
-    EXPECT_TRUE( decodeResult.frames.empty() );
-    EXPECT_EQ( decodeResult.numExtra, 1 );
+    testPayloads( decodeResult, {}, 1 );
   }
 
   // Decode
@@ -496,11 +506,8 @@ TEST(Decoding, WebSocketFrame)
     memset( frameBytes, 0x00, sizeof(frameBytes) );
     memcpy( frameBytes, "\x00\x00", 2 );
     const auto decodeResult = decoder.decode( frameBytes, 2 );
-    EXPECT_FALSE( decodeResult.parseError );
-    ASSERT_EQ( decodeResult.frames.size(), 1 );
+    testPayloads( decodeResult, { {} }, 0 );
     testHeader( decodeResult.frames[0].header, false, ws::Header::OpCode::eContinuation, 0 );
-    EXPECT_TRUE( decodeResult.frames[0].payload.empty() );
-    EXPECT_EQ( decodeResult.numExtra, 0 );
   }
 
   // Decode
@@ -510,32 +517,38 @@ TEST(Decoding, WebSocketFrame)
     memset( frameBytes, 0x00, sizeof(frameBytes) );
     memcpy( frameBytes, "\x00\x01X", 3 );
     const auto decodeResult = decoder.decode( frameBytes, 3 );
-    EXPECT_FALSE( decodeResult.parseError );
-    ASSERT_EQ( decodeResult.frames.size(), 1 );
+    testPayloads( decodeResult, { { "X" } }, 0 );
     testHeader( decodeResult.frames[0].header, false, ws::Header::OpCode::eContinuation, 1 );
-    ASSERT_EQ( decodeResult.frames[0].payload.size(), 1 );
-    EXPECT_EQ( decodeResult.frames[0].payload[0], 'X' );
-    EXPECT_EQ( decodeResult.numExtra, 0 );
+  }
+
+  // Decode
+  // - one byte, the first byte of a header indicating a three byte payload
+  // - four bytes, the remaining header bvte and the three payload bytes
+  {
+    ws::Decoder decoder;
+    memset( frameBytes, 0x00, sizeof(frameBytes) );
+    memcpy( frameBytes, "\x00\x03XYZ", 5 );
+    const auto decodeResult1 = decoder.decode( frameBytes, 1 );
+    testPayloads( decodeResult1, {}, 1 );
+    const auto decodeResult2 = decoder.decode( frameBytes + 1, 4 );
+    testPayloads( decodeResult2, { { "XYZ" } }, 0 );
+    testHeader( decodeResult2.frames[0].header, false, ws::Header::OpCode::eContinuation, 3 );
   }
 
   // Decode
   // - three bytes, a header indicating a three byte payload and the first payload byte
   // - two bytes, the remaining two payload bytes
+  //
+  // This is the same as the example above but the byte buffers are arranged differently.
   {
     ws::Decoder decoder;
     memset( frameBytes, 0x00, sizeof(frameBytes) );
     memcpy( frameBytes, "\x00\x03XYZ", 5 );
     const auto decodeResult1 = decoder.decode( frameBytes, 3 );
-    EXPECT_FALSE( decodeResult1.parseError );
-    EXPECT_TRUE( decodeResult1.frames.empty() );
-    EXPECT_EQ( decodeResult1.numExtra, 1 );
+    testPayloads( decodeResult1, {}, 1 );
     const auto decodeResult2 = decoder.decode( frameBytes + 3, 2 );
-    EXPECT_FALSE( decodeResult2.parseError );
-    ASSERT_EQ( decodeResult2.frames.size(), 1 );
+    testPayloads( decodeResult2, { { "XYZ" } }, 0 );
     testHeader( decodeResult2.frames[0].header, false, ws::Header::OpCode::eContinuation, 3 );
-    ASSERT_EQ( decodeResult2.frames[0].payload.size(), 3 );
-    EXPECT_EQ( decodeResult2.frames[0].payload, "XYZ" );
-    EXPECT_EQ( decodeResult2.numExtra, 0 );
   }
 
   // Decode
@@ -547,45 +560,13 @@ TEST(Decoding, WebSocketFrame)
     memset( frameBytes, 0x00, sizeof(frameBytes) );
     memcpy( frameBytes, "\x00\x09""abcDEF[]!", 11 );
     const auto decodeResult1 = decoder.decode( frameBytes, 1 );
-    EXPECT_FALSE( decodeResult1.parseError );
-    EXPECT_TRUE( decodeResult1.frames.empty() );
-    EXPECT_EQ( decodeResult1.numExtra, 1 );
+    testPayloads( decodeResult1, {}, 1 );
     const auto decodeResult2 = decoder.decode( frameBytes + 1, 3 );
-    EXPECT_FALSE( decodeResult2.parseError );
-    EXPECT_TRUE( decodeResult2.frames.empty() );
-    EXPECT_EQ( decodeResult2.numExtra, 2 );
+    testPayloads( decodeResult2, {}, 2 );
     const auto decodeResult3 = decoder.decode( frameBytes + 4, 7 );
     EXPECT_FALSE( decodeResult3.parseError );
-    ASSERT_EQ( decodeResult3.frames.size(), 1 );
+    testPayloads( decodeResult3, { { "abcDEF[]!" } }, 0 );
     testHeader( decodeResult3.frames[0].header, false, ws::Header::OpCode::eContinuation, 9 );
-    ASSERT_EQ( decodeResult3.frames[0].payload.size(), 9 );
-    EXPECT_EQ( decodeResult3.frames[0].payload, "abcDEF[]!" );
-    EXPECT_EQ( decodeResult3.numExtra, 0 );
-  }
-
-  // Decode
-  // - one byte, the first byte of a two byte header indicating a 9 byte payload
-  // - three bytes, the second byte of the header indicating a three byte payload and the first payload byte
-  // - two bytes, the remaining two payload bytes
-  {
-    ws::Decoder decoder;
-    memset( frameBytes, 0x00, sizeof(frameBytes) );
-    memcpy( frameBytes, "\x00\x09""abcDEF[]!", 11 );
-    const auto decodeResult1 = decoder.decode( frameBytes, 1 );
-    EXPECT_FALSE( decodeResult1.parseError );
-    EXPECT_TRUE( decodeResult1.frames.empty() );
-    EXPECT_EQ( decodeResult1.numExtra, 1 );
-    const auto decodeResult2 = decoder.decode( frameBytes + 1, 3 );
-    EXPECT_FALSE( decodeResult2.parseError );
-    EXPECT_TRUE( decodeResult2.frames.empty() );
-    EXPECT_EQ( decodeResult2.numExtra, 2 );
-    const auto decodeResult3 = decoder.decode( frameBytes + 4, 7 );
-    EXPECT_FALSE( decodeResult3.parseError );
-    ASSERT_EQ( decodeResult3.frames.size(), 1 );
-    testHeader( decodeResult3.frames[0].header, false, ws::Header::OpCode::eContinuation, 9 );
-    ASSERT_EQ( decodeResult3.frames[0].payload.size(), 9 );
-    EXPECT_EQ( decodeResult3.frames[0].payload, "abcDEF[]!" );
-    EXPECT_EQ( decodeResult3.numExtra, 0 );
   }
 
   // Decode
@@ -595,11 +576,7 @@ TEST(Decoding, WebSocketFrame)
     memset( frameBytes, 0x00, sizeof(frameBytes) );
     memcpy( frameBytes, "\x00\x8B\x00\x00\x00\x00[123456789]", 17 );
     const auto decodeResult = decoder.decode( frameBytes, 17 );
-    EXPECT_FALSE( decodeResult.parseError );
-    ASSERT_EQ( decodeResult.frames.size(), 1 );
-    ASSERT_EQ( decodeResult.frames[0].payload.size(), 11 );
-    EXPECT_EQ( decodeResult.frames[0].payload, "[123456789]" );
-    EXPECT_EQ( decodeResult.numExtra, 0 );
+    testPayloads( decodeResult, { { "[123456789]" } }, 0 );
   }
 
   // Decode
@@ -612,11 +589,89 @@ TEST(Decoding, WebSocketFrame)
     memset( frameBytes, 0x00, sizeof(frameBytes) );
     memcpy( frameBytes, "\x81\x85\x37\xFA\x21\x3D\x7F\x9F\x4D\x51\x58", 11 );
     const auto decodeResult = decoder.decode( frameBytes, 11 );
-    EXPECT_FALSE( decodeResult.parseError );
-    ASSERT_EQ( decodeResult.frames.size(), 1 );
-    ASSERT_EQ( decodeResult.frames[0].payload.size(), 5 );
-    EXPECT_EQ( decodeResult.frames[0].payload, "Hello" );
-    EXPECT_EQ( decodeResult.numExtra, 0 );
+    testPayloads( decodeResult, { { "Hello" } }, 0 );
+  }
+
+  // Repeat three of the previous tests but re-using the Decoder object to test
+  // that it is properly retains state across frames. This is a simple test where
+  // each frame's bytes end at the end of a byte buffer.
+  {
+    ws::Decoder decoder;
+    // Decode (1 of 3)
+    // - 17 bytes, a six byte header with a no-op masked 11 byte payload
+    {
+      memset( frameBytes, 0x00, sizeof(frameBytes) );
+      memcpy( frameBytes, "\x00\x8B\x00\x00\x00\x00[123456789]", 17 );
+      const auto decodeResult = decoder.decode( frameBytes, 17 );
+      testPayloads( decodeResult, { { "[123456789]" } }, 0 );
+    }
+
+    // Decode (2 of 3)
+    // - one byte, the first byte of a two byte header indicating a 9 byte payload
+    // - three bytes, the second byte of the header indicating a three byte payload and the first payload byte
+    // - two bytes, the remaining two payload bytes
+    {
+      memset( frameBytes, 0x00, sizeof(frameBytes) );
+      memcpy( frameBytes, "\x00\x09""abcDEF[]!", 11 );
+      const auto decodeResult1 = decoder.decode( frameBytes, 1 );
+      testPayloads( decodeResult1, {}, 1 );
+      const auto decodeResult2 = decoder.decode( frameBytes + 1, 3 );
+      testPayloads( decodeResult2, {}, 2 );
+      const auto decodeResult3 = decoder.decode( frameBytes + 4, 7 );
+      testPayloads( decodeResult3, { { "abcDEF[]!" } }, 0 );
+      testHeader( decodeResult3.frames[0].header, false, ws::Header::OpCode::eContinuation, 9 );
+    }
+
+    // Decode (3 of 3)
+    // - 11 bytes, a six byte header with a masked 5 byte payload
+    //
+    // This is the masked frame example from RFC 6455. The unmasked payload is the
+    // string "Hello".
+    {
+      memset( frameBytes, 0x00, sizeof(frameBytes) );
+      memcpy( frameBytes, "\x81\x85\x37\xFA\x21\x3D\x7F\x9F\x4D\x51\x58", 11 );
+      const auto decodeResult = decoder.decode( frameBytes, 11 );
+      testPayloads( decodeResult, { { "Hello" } }, 0 );
+    }
+  }
+
+  // Now use the same three frames but split the byte buffers up differently so
+  // that frame boundaries lie within byte buffers and not at byte buffer
+  // boundaries.
+  {
+    ws::Decoder decoder;
+    memset( frameBytes, 0x00, sizeof(frameBytes) );
+    memcpy( frameBytes
+          , "\x00\x8B\x00\x00\x00\x00[123456789]"          // 6 byte header, 11 byte payload
+            "\x00\x09""abcDEF[]!"                          // 2 byte header,  9 byte payload
+            "\x81\x85\x37\xFA\x21\x3D\x7F\x9F\x4D\x51\x58" // 6 byte header,  5 byte payload
+          , 17 + 11 + 11 );
+
+    // Decode (1 of 8)
+    // - 17 bytes, a six byte header with a no-op masked 11 byte payload
+    const auto decodeResult1 = decoder.decode( frameBytes, 5 );
+    testPayloads( decodeResult1, {}, 5 );
+
+    const auto decodeResult2 = decoder.decode( frameBytes + 5, 5 );
+    testPayloads( decodeResult2, {}, 4 );
+
+    const auto decodeResult3 = decoder.decode( frameBytes + 10, 5 );
+    testPayloads( decodeResult3, {}, 5 );
+
+    const auto decodeResult4 = decoder.decode( frameBytes + 15, 5 );
+    testPayloads( decodeResult4, { { "[123456789]" } }, 1 ); // + header of next frame
+
+    const auto decodeResult5 = decoder.decode( frameBytes + 20, 5 );
+    testPayloads( decodeResult5, {}, 5 );
+
+    const auto decodeResult6 = decoder.decode( frameBytes + 25, 5 );
+    testPayloads( decodeResult6, { "abcDEF[]!" }, 2 );
+
+    const auto decodeResult7 = decoder.decode( frameBytes + 30, 5 );
+    testPayloads( decodeResult7, {}, 1 );
+
+    const auto decodeResult8 = decoder.decode( frameBytes + 35, 4 );
+    testPayloads( decodeResult8, { "Hello" }, 0 );
   }
 
   // Decode

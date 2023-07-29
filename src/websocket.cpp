@@ -380,16 +380,20 @@ Decoder::Result Decoder::Private::decode( const char* p, size_t numBytes )
           continue;
         }
         result.numExtra = numBytes;
-        partialData.clear();
         if ( !decodePayload( p, numBytes ) )
         {
+          // Remove the header bytes from partialData so that it contains just
+          // the partial payload.
+          std::vector<char> tmpPartial;
+          tmpPartial.insert( tmpPartial.end(), p, p + numBytes );
+          partialData.clear();
+          partialData.swap( tmpPartial );
+
           status = Status::ePartialPayload;
-          partialData.insert( partialData.end(), p, p + numBytes );
           result.numExtra = numBytes;
           numBytes = 0;
           continue;
         }
-        result.numExtra = 0;
         break;
 
       case Status::ePartialPayload:
@@ -402,12 +406,15 @@ Decoder::Result Decoder::Private::decode( const char* p, size_t numBytes )
           numBytes = 0;
           continue;
         }
-        result.numExtra = 0;
         break;
       }
 
       // Any code path that did not produce a full frame did a continue so if
-      // we got here i.e. from a switch break then we have a full frame
+      // we got here, i.e. from a switch break, then we have a full frame.
+      partialData.clear();
+      status = Status::eNothing;
+      result.numExtra = 0;
+
       result.frames.emplace_back();
       std::swap( result.frames.back().header,  header );
       std::swap( result.frames.back().payload, payload );
