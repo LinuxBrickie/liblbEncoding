@@ -1,5 +1,5 @@
 COMPILE := g++
-CXXFLAGS := -MMD -fPIC -Iinc
+CXXFLAGS := -MMD -fPIC -Iinc -Wall
 
 SRCDIR := src
 BUILDDIR := .

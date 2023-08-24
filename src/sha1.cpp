@@ -112,7 +112,7 @@ void encode( const char* src, size_t numSrcChars, char* dst )
   // we could just do std::memcpy( w, p, 64 ) but this way the code is endian
   // agnostic.
   uint32_t* p{ (uint32_t*)buffer.get() };
-  for ( int chunk = 0; chunk < N; chunk += 64 )
+  for ( size_t chunk = 0; chunk < N; chunk += 64 )
   {
     uint8_t* w{ (uint8_t*)bigEndianWords };
 

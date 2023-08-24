@@ -304,16 +304,63 @@ std::string encodeMaskedPayload( const std::string& src
 std::string decodeMaskedPayload( const std::string& src
                                , const uint8_t mask[4] );
 
+namespace closestatus
+{
+
+//! The two byte integer value directly from the payload.
+using PayloadCode = unsigned int;
 
 /**
-    \brief The possible payload status codes of a CloseConnection control frame.
+   From RFC6455 Section 7.4.2:
+
+   Reserved Status Code Ranges
+
+   0-999
+      Status codes in the range 0-999 are not used.
+
+   1000-2999
+      Status codes in the range 1000-2999 are reserved for definition by
+      this protocol, its future revisions, and extensions specified in a
+      permanent and readily available public specification.
+
+   3000-3999
+      Status codes in the range 3000-3999 are reserved for use by
+      libraries, frameworks, and applications.  These status codes are
+      registered directly with IANA.  The interpretation of these codes
+      is undefined by this protocol.
+
+   4000-4999
+      Status codes in the range 4000-4999 are reserved for private use
+      and thus can't be registered.  Such codes can be used by prior
+      agreements between WebSocket applications.  The interpretation of
+      these codes is undefined by this protocol.
  */
-enum class CloseStatusCode
+enum class CodeRange
+{
+  eUnused,   //!<    0 -  999
+  eProtocol, //!< 1000 - 2999
+  eIANA,     //!< 3000 - 3999
+  ePrivate,  //!< 4000 - 4999
+  eOutside   //!< 5000 onwards
+};
+
+// For logging and debugging
+std::string toString( CodeRange );
+
+/** \brief Provides the CloseStatusCodeRange for the numeric code. */
+CodeRange toCodeRange( PayloadCode );
+
+
+/**
+    \brief The valid payload status codes for CloseStatusCodeRange::eProtocol
+ */
+enum class ProtocolCode
 {
   eNormal              = 1000,
   eGoingAway           = 1001,
   eProtocolError       = 1002,
   eUnacceptableData    = 1003,
+  eNoCodeProvided      = 1005, //!< Only ever set in the *absence* of a code
   eMismatchedData      = 1007,
   ePolicyViolation     = 1008,
   eTooMuchData         = 1009,
@@ -321,6 +368,53 @@ enum class CloseStatusCode
   eUnexpectedCondition = 1011, //!< Server only
 };
 
+// For logging and debugging
+std::string toString( ProtocolCode );
+
+/**
+    \brief Convert the numeric code to a specific ProtocolCode.
+    \return The ProtocolCode or an empty optional if there is no match.
+ */
+std::optional<ProtocolCode> toProtocol( PayloadCode );
+
+/** \brief Convert the ProtocolCode to a numeric code. */
+PayloadCode toPayload( ProtocolCode );
+
+/**
+    \brief The valid payload status codes for CloseStatusCodeRange::eIANA as of
+           August 2023.
+ */
+enum class IANACode
+{
+  eUnauthorised = 3000,
+  eForbidden    = 3003
+};
+
+// For logging and debugging
+std::string toString( IANACode );
+
+/**
+    \brief Convert the numeric code to a specific IANACloseStatusCode.
+    \throw std::runtime_error if conversion fails.
+ */
+std::optional<IANACode> toIANA( PayloadCode );
+
+/** \brief Convert the IANACode to a numeric code. */
+PayloadCode toPayload( IANACode );
+
+
+/**
+    \brief Encodes \a payloadCode into \a dst as a two-byte integer stored
+           in network order.
+    \param closeStatusCode The status code to encode.
+    \param dst The destination for the encoding. Assumes that two contiguous
+               bytes are available for access.
+    \sa encodePayloadCode( CloseStatusCode, std::string& )
+
+    Note that an attempt to set CloseStatusCode::eNoCodeProvided will be
+    silently ignored.
+ */
+void encodePayloadCode( PayloadCode payloadCode, char* dst );
 
 /**
     \brief Encodes \a closeStatusCode into \a dst as a two-byte integer stored
@@ -328,39 +422,41 @@ enum class CloseStatusCode
     \param closeStatusCode The status code to encode.
     \param dst The destination for the encoding. Assumes that two contiguous
                bytes are available for access.
-    \sa encodePayloadCloseStatusCode( CloseStatusCode, std::string& )
+    \sa encodePayloadCode( CloseStatusCode, char* )
+
+    Note that an attempt to set CloseStatusCode::eNoCodeProvided will be
+    silently ignored.
  */
-void encodePayloadCloseStatusCode( CloseStatusCode closeStatusCode, char* dst );
+void encodePayloadCode( PayloadCode payloadCode, std::string& dst );
 
 /**
-    \brief Encodes \a closeStatusCode into \a dst as a two-byte integer stored
-           in network order.
-    \param closeStatusCode The status code to encode.
-    \param dst The destination for the encoding. Assumes that two contiguous
-               bytes are available for access.
-    \sa encodePayloadCloseStatusCode( CloseStatusCode, char* )
- */
-void encodePayloadCloseStatusCode( CloseStatusCode closeStatusCode, std::string& dst );
-
-/**
-    \brief Decodes two bytes of \a src into a CloseStatusCode assuming that they
+    \brief Decodes two bytes of \a src into a PayloadCode assuming that they
           represent an integer stored in network order.
-    \param src The source for the decoding. Assumes that two contiguous bytes
-               bytes are available for access.
-    \return The decoded CloseStatusCode if successful or an empty optional if not.
-    \sa decodePayloadCloseStatusCode( CloseStatusCode, std::string& )
+    \param src The source for the decoding. Less than two characters may be passed.
+    \return The decoded PayloadCode or ProtocolCode::eNoCodeProvided if absent.
+    \sa decodePayloadCode( PayloadCode, std::string& )
+
+    If \a src contains less than two characters then the code is treated as
+    absent and the value associated with ProtocolCode::eNoCodeProvided is
+    returned.
  */
-std::optional<CloseStatusCode> decodePayloadCloseStatusCode( const char* src );
+PayloadCode decodePayloadCode( const char* src, size_t numSrcChars );
 
 /**
-    \brief Decodes two bytes of \a src into a CloseStatusCode assuming that they
+    \brief Decodes two bytes of \a src into a PayloadCode assuming that they
           represent an integer stored in network order.
-    \param src The source for the decoding. Assumes that two contiguous bytes
-               bytes are available for access.
-    \return The decoded CloseStatusCode if successful or an empty optional if not.
-    \sa decodePayloadCloseStatusCode( CloseStatusCode, const char* )
+    \param src The source for the decoding. Less than two characters may be passed.
+    \return The decoded PayloadCode or 0 if absent.
+    \sa decodePayloadCode( PayloadCode, const char*, size_t )
+
+    If \a src contains less than two characters then the code is treated as
+    absent and the value associated with ProtocolCode::eNoCodeProvided is
+    returned.
  */
-std::optional<CloseStatusCode> decodePayloadCloseStatusCode( const std::string& src );
+PayloadCode decodePayloadCode( const std::string& src );
+
+
+} // End of namespace closestatus
 
 
 } // End of namespace websocket
@@ -370,5 +466,6 @@ std::optional<CloseStatusCode> decodePayloadCloseStatusCode( const std::string& 
 
 
 } // End of namespace lb
+
 
 #endif // LB_ENCODING_WEBSOCKET_H

@@ -420,7 +420,7 @@ Decoder::Result Decoder::Private::decode( const char* p, size_t numBytes )
       std::swap( result.frames.back().payload, payload );
     }
   }
-  catch( std::runtime_error e )
+  catch( const std::runtime_error& e )
   {
     result.parseError = true;
     result.numExtra = numBytes;
@@ -436,6 +436,8 @@ bool Decoder::Private::decodeHeader( const char*& buffer, size_t& numBufferBytes
   {
   case Header::DecodeResult::eIncomplete:
     break;
+  case Header::DecodeResult::eInvalidOpCode:
+    throw std::runtime_error{ "Failed to deserialise frame header. Invalid op code." };
   case Header::DecodeResult::ePayloadSizeInflatedEncoding:
     throw std::runtime_error{ "Failed to deserialise frame header. Payload size using inflated encoding." };
   case Header::DecodeResult::ePayloadSizeEighthByteMSBNotZero:
@@ -481,7 +483,6 @@ void encodeMaskedPayload( const char* src
 {
   const size_t numTrailingBytes{ numSrcChars % 4 };
   const size_t numQuartets{ ( numSrcChars - numTrailingBytes ) / 4 };
-  size_t i = 0;
   for ( size_t q = 0; q < numQuartets; ++q )
   {
     *dst = *src ^ mask[0]; ++src; ++dst;
@@ -555,115 +556,219 @@ std::string decodeMaskedPayload( const std::string& src
   return encodeMaskedPayload( src, mask );
 }
 
-template < class T >
-void encodePayloadCloseStatusCodeT( CloseStatusCode statusCode, T& dst )
+namespace closestatus
 {
-  switch ( statusCode )
+
+std::string toString( CodeRange cr )
+{
+  switch ( cr )
   {
-  case CloseStatusCode::eNormal: // 1000
-    dst[0] = 0x03;
-    dst[1] = 0xE8;
-    break;
-  case CloseStatusCode::eGoingAway: // 1001
-    dst[0] = 0x03;
-    dst[1] = 0xE9;
-    break;
-  case CloseStatusCode::eProtocolError: // 1002
-    dst[0] = 0x03;
-    dst[1] = 0xEA;
-    break;
-  case CloseStatusCode::eUnacceptableData: // 1003
-    dst[0] = 0x03;
-    dst[1] = 0xEB;
-    break;
-  case CloseStatusCode::eMismatchedData: // 1007
-    dst[0] = 0x03;
-    dst[1] = 0xEF;
-    break;
-  case CloseStatusCode::ePolicyViolation: // 1008
-    dst[0] = 0x03;
-    dst[1] = 0xF0;
-    break;
-  case CloseStatusCode::eTooMuchData: // 1009
-    dst[0] = 0x03;
-    dst[1] = 0xF1;
-    break;
-  case CloseStatusCode::eLackingExtension: // 1010
-    dst[0] = 0x03;
-    dst[1] = 0xF2;
-    break;
-  case CloseStatusCode::eUnexpectedCondition: // 1011
-    dst[0] = 0x03;
-    dst[1] = 0xF3;
-    break;
+  case CodeRange::eUnused:
+    return "Unused";
+  case CodeRange::eProtocol:
+    return "Protocol";
+  case CodeRange::eIANA:
+    return "IANA";
+  case CodeRange::ePrivate:
+    return "Private";
+  case CodeRange::eOutside:
+    return "Outside";
   }
+  return "Unknown";
 }
 
-void encodePayloadCloseStatusCode( CloseStatusCode statusCode, char* dst )
+CodeRange toCodeRange( PayloadCode p )
 {
-  encodePayloadCloseStatusCodeT( statusCode, dst );
-}
-
-void encodePayloadCloseStatusCode( CloseStatusCode statusCode, std::string& dst )
-{
-  encodePayloadCloseStatusCodeT( statusCode, dst );
-}
-
-template < class T >
-std::optional<CloseStatusCode> decodePayloadCloseStatusCodeT( const T& src )
-{
-  if ( src[0] == (char)0x03 )
+  if ( ( 0 <= p ) && ( p <= 999 ) )
   {
-    if ( src[1] == (char)0xE8 )
-    {
-      return CloseStatusCode::eNormal; // 1000
-    }
-    else if ( src[1] == (char)0xE9 )
-    {
-      return CloseStatusCode::eGoingAway; // 1001
-    }
-    else if ( src[1] == (char)0xEA )
-    {
-      return CloseStatusCode::eProtocolError; // 1002
-    }
-    else if ( src[1] == (char)0xEB )
-    {
-      return CloseStatusCode::eUnacceptableData; // 1003
-    }
-    else if ( src[1] == (char)0xEF )
-    {
-      return CloseStatusCode::eMismatchedData; // 1007
-    }
-    else if ( src[1] == (char)0xF0 )
-    {
-      return CloseStatusCode::ePolicyViolation; // 1008
-    }
-    else if ( src[1] == (char)0xF1 )
-    {
-      return CloseStatusCode::eTooMuchData; // 1009
-    }
-    else if ( src[1] == (char)0xF2 )
-    {
-      return CloseStatusCode::eLackingExtension; // 1010
-    }
-    else if ( src[1] == (char)0xF3 )
-    {
-      return CloseStatusCode::eUnexpectedCondition; // 1011
-    }
+    return CodeRange::eUnused;
+  }
+  else if ( ( 1000 <= p ) && ( p <= 2999 ) )
+  {
+    return CodeRange::eProtocol;
+  }
+  else if ( ( 3000 <= p ) && ( p <= 3999 ) )
+  {
+    return CodeRange::eIANA;
+  }
+  else if ( ( 4000 <= p ) && ( p <= 4999 ) )
+  {
+    return CodeRange::ePrivate;
+  }
+
+  return CodeRange::eOutside;
+}
+
+std::string toString( ProtocolCode pc )
+{
+  switch ( pc )
+  {
+  case ProtocolCode::eNormal:
+    return "Normal";
+  case ProtocolCode::eGoingAway:
+    return "Going Away";
+  case ProtocolCode::eProtocolError:
+    return "Protocol Error";
+  case ProtocolCode::eUnacceptableData:
+    return "Unacceptable Data";
+  case ProtocolCode::eNoCodeProvided:
+    return "No Code Provided";
+  case ProtocolCode::eMismatchedData:
+    return "Mismatched Data";
+  case ProtocolCode::ePolicyViolation:
+    return "Policy Violation";
+  case ProtocolCode::eTooMuchData:
+    return "Too Much Data";
+  case ProtocolCode::eLackingExtension:
+    return "Lacking Extension";
+  case ProtocolCode::eUnexpectedCondition:
+    return "Unexpected Condition";
+  }
+
+  return "Unknown";
+}
+
+std::optional<ProtocolCode> toProtocol( PayloadCode p )
+{
+  if ( p == static_cast<PayloadCode>( ProtocolCode::eNormal ) ) // 1000
+  {
+    return ProtocolCode::eNormal;
+  }
+  else if ( p == static_cast<PayloadCode>( ProtocolCode::eGoingAway ) ) // 1001
+  {
+    return ProtocolCode::eGoingAway;
+  }
+  else if ( p == static_cast<PayloadCode>( ProtocolCode::eProtocolError ) ) // 1002
+  {
+    return ProtocolCode::eProtocolError;
+  }
+  else if ( p == static_cast<PayloadCode>( ProtocolCode::eUnacceptableData ) ) // 1003
+  {
+    return ProtocolCode::eUnacceptableData;
+  }
+  else if ( p == static_cast<PayloadCode>( ProtocolCode::eNoCodeProvided ) ) // 1005
+  {
+    return ProtocolCode::eNoCodeProvided;
+  }
+  else if ( p == static_cast<PayloadCode>( ProtocolCode::eMismatchedData ) ) // 1007
+  {
+    return ProtocolCode::eMismatchedData;
+  }
+  else if ( p == static_cast<PayloadCode>( ProtocolCode::ePolicyViolation ) ) // 1008
+  {
+    return ProtocolCode::ePolicyViolation;
+  }
+  else if ( p == static_cast<PayloadCode>( ProtocolCode::eTooMuchData ) ) // 1009
+  {
+    return ProtocolCode::eTooMuchData;
+  }
+  else if ( p == static_cast<PayloadCode>( ProtocolCode::eLackingExtension ) ) // 1010
+  {
+    return ProtocolCode::eLackingExtension;
+  }
+  else if ( p == static_cast<PayloadCode>( ProtocolCode::eUnexpectedCondition ) ) // 1011
+  {
+    return ProtocolCode::eUnexpectedCondition;
   }
 
   return {};
 }
 
-std::optional<CloseStatusCode> decodePayloadCloseStatusCode( const char* src )
+PayloadCode toPayload( ProtocolCode p )
 {
-  return decodePayloadCloseStatusCodeT( src );
+  return static_cast<PayloadCode>( p );
 }
 
-std::optional<CloseStatusCode> decodePayloadCloseStatusCode( const std::string& src )
+std::string toString( IANACode ic )
 {
-  return decodePayloadCloseStatusCodeT( src );
+  switch ( ic )
+  {
+  case IANACode::eUnauthorised:
+    return "Unauthorised";
+  case IANACode::eForbidden:
+    return "Forbidden";
+  }
+
+  return "Unknown";
 }
+
+std::optional<IANACode> toIANA( PayloadCode p )
+{
+  if ( p == static_cast< PayloadCode >( IANACode::eUnauthorised ) )
+  {
+    return IANACode::eUnauthorised;
+  }
+  else if ( p == static_cast< PayloadCode >( IANACode::eForbidden )  )
+  {
+    return IANACode::eForbidden;
+  }
+
+  return {};
+}
+
+PayloadCode toPayload( IANACode p )
+{
+  return static_cast<PayloadCode>( p );
+}
+
+template < class T >
+void encodePayloadCodeT( PayloadCode payloadCode, T& dst )
+{
+  const uint16_t twoByteCodeNetworkOrder{ htons( payloadCode ) };
+  dst[0] = ((char*)&twoByteCodeNetworkOrder)[0];
+  dst[1] = ((char*)&twoByteCodeNetworkOrder)[1];
+}
+
+void encodePayloadCode( PayloadCode payloadCode, char* dst )
+{
+  encodePayloadCodeT( payloadCode, dst );
+}
+
+void encodePayloadCode( PayloadCode payloadCode, std::string& dst )
+{
+  encodePayloadCodeT( payloadCode, dst );
+}
+
+template < class T >
+PayloadCode decodePayloadCodeT( const T& src )
+{
+  return ntohs( *( (uint16_t*) &src[0] ) );
+}
+
+PayloadCode decodePayloadCode( const char* src, size_t numSrcChars )
+{
+  // From RFC6455 Section 7.1.5:
+  //
+  // "If this Close control frame contains no status code, _The WebSocket
+  // Connection Close Code_ is considered to be 1005."
+  if ( numSrcChars < 2 )
+  {
+    return toPayload( ProtocolCode::eNoCodeProvided ); // 1005
+  }
+  else
+  {
+    return decodePayloadCodeT( src );
+  }
+}
+
+PayloadCode decodePayloadCode( const std::string& src )
+{
+  // From RFC6455 Section 7.1.5:
+  //
+  // "If this Close control frame contains no status code, _The WebSocket
+  // Connection Close Code_ is considered to be 1005."
+  if ( src.size() < 2 )
+  {
+    return toPayload( ProtocolCode::eNoCodeProvided ); // 1005
+  }
+  else
+  {
+    return decodePayloadCodeT( src );
+  }
+}
+
+
+} // End of namespace closestatus
 
 
 } // End of namespace websocket
