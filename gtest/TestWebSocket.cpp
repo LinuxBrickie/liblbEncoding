@@ -694,11 +694,31 @@ TEST(Decoding, WebSocketFrame)
   {
     ws::Decoder decoder;
     memset( frameBytes, 0x00, sizeof(frameBytes) );
-    memcpy( frameBytes, "\x00\x7E\x00\x01", 3 );
+    memcpy( frameBytes, "\x00\x7E\x00\x01", 4 );
     const auto decodeResult = decoder.decode( frameBytes, 4 );
     EXPECT_TRUE( decodeResult.parseError );
     EXPECT_TRUE( decodeResult.frames.empty() );
     EXPECT_EQ( decodeResult.numExtra, 4 );
+  }
+
+  // Decode
+  // - The first frame of a fragmented message
+  // - A ping control frame
+  // - The second frame of a fragmneted message
+  // - A ping control frame
+  // - The final frame of a fragmented message
+  {
+    ws::Decoder decoder;
+    memset( frameBytes, 0x00, sizeof(frameBytes) );
+    memcpy( frameBytes, "\x01\x04""abcd"
+                        "\x89\x00"
+                        "\x01\x04""efgh"
+                        "\x89\x00"
+                        "\x01\x04""ijkl", 22 );
+    const auto decodeResult = decoder.decode( frameBytes, 22 );
+    testPayloads( decodeResult
+                , { {"abcd"}, {""}, {"efgh"}, {""}, {"ijkl"} }
+                , 0 );
   }
 }
 
